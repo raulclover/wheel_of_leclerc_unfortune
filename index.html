@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wheel of Unfortune — Leclerc edition</title>
+<style>
+  :root {
+    --bg: #15151E;
+    --panel: #1F1F2B;
+    --red: #E8002D;
+    --white: #F5F5F5;
+    --muted: #9A9AAB;
+    --yellow: #FFD800;
+    --border: #33334280;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--white);
+    font-family: "Segoe UI", system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px 48px;
+  }
+  .eyebrow {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 12px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--red);
+    margin-bottom: 10px;
+  }
+  h1 {
+    font-size: clamp(26px, 5vw, 40px);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    text-align: center;
+  }
+  h1 span { color: var(--red); }
+  .sub {
+    color: var(--muted);
+    font-size: 14px;
+    margin-top: 8px;
+    text-align: center;
+    max-width: 480px;
+    line-height: 1.6;
+  }
+  .wheel-wrap { position: relative; width: min(440px, 92vw); margin-top: 28px; }
+  canvas { width: 100%; height: auto; display: block; }
+  button {
+    margin-top: 24px;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 15px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    background: var(--red);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 14px 34px;
+    cursor: pointer;
+    transition: transform 0.1s ease, opacity 0.2s ease;
+  }
+  button:hover { transform: translateY(-1px); }
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.4; cursor: wait; transform: none; }
+  .result {
+    display: none;
+    margin-top: 24px;
+    width: min(560px, 92vw);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--red);
+    border-radius: 8px;
+    padding: 18px 22px;
+  }
+  .result.win { border-left-color: var(--yellow); }
+  .result h2 {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 13px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--red);
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .result.win h2 { color: var(--yellow); }
+  .result p { font-size: 15px; line-height: 1.65; }
+  .result .odds {
+    margin-top: 10px;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  footer {
+    margin-top: 40px;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-align: center;
+    line-height: 1.8;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    button { transition: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="eyebrow">Scuderia edition · GP predictor</div>
+  <h1>Wheel of <span>Unfortune</span></h1>
+  <p class="sub">Что случится с Шарлем Леклером на следующем гран-при? Крутите барабан — судьба уже согласована с мостиком Ferrari.</p>
+
+  <div class="wheel-wrap">
+    <canvas id="wheel" width="880" height="880" aria-label="Колесо неудачи со сценариями"></canvas>
+  </div>
+
+  <button id="spinBtn">Крутите барабан!</button>
+
+  <div class="result" id="result">
+    <h2 id="resultTitle"></h2>
+    <p id="resultText"></p>
+    <div class="odds" id="resultOdds"></div>
+  </div>
+
+  <footer>
+    Сектора взвешены по вероятности · победа занимает честный 1%<br>
+    We are checking. We will check after the race.
+  </footer>
+
+<script>
+const sectors = [
+  {s:"We are checking", f:"«We are checking» — и так до конца гонки. Ответ придёт на следующей неделе в пресс-релизе.", w:18, fill:"#E24B4A", tx:"#2B0505"},
+  {s:"Plan C", f:"Переход на Plan C. Что такое Plan C, не знает никто, включая мостик Ferrari.", w:10, fill:"#F0997B", tx:"#3A1206"},
+  {s:"Харды перед дождём", f:"Пит-стоп на харды за 5 кругов до дождя. Радар видел «окно» — окно видело радар.", w:8, fill:"#EF9F27", tx:"#301B01"},
+  {s:"Двойной стек", f:"Двойной стек: Шарль ждёт за напарником 4 секунды и выезжает в трафик.", w:8, fill:"#ED93B1", tx:"#330A18"},
+  {s:"Отказ мотора", f:"Отказ силовой установки из лидирующей позиции. Классика Барселоны и Баку 2022. Turn off the engine, Charles.", w:8, fill:"#F09595", tx:"#3A0808"},
+  {s:"Гидравлика", f:"Гидравлика умерла на прогревочном круге. Гонка закончилась до гонки.", w:5, fill:"#B4B2A9", tx:"#1D1D1B"},
+  {s:"Красный флаг в Q3", f:"Красный флаг в Q3 ровно перед его быстрым кругом. Секундомер замер — вместе с надеждой.", w:6, fill:"#AFA9EC", tx:"#181439"},
+  {s:"Поул → P4", f:"Блестящий поул в субботу → финиш P4 в воскресенье. Стратегия «отрицательного прогресса».", w:10, fill:"#85B7EB", tx:"#021C36"},
+  {s:"Проклятие Монако", f:"Проклятие домашней гонки наносит новый удар. Монако не прощает тех, кто там родился.", w:6, fill:"#7F77DD", tx:"#16123C"},
+  {s:"«I am stupid»", f:"«I am stupid» — Шарль сам себя штрафует в радиоэфире. Инженер отвечает: «Copy».", w:5, fill:"#5DCAA5", tx:"#02231D"},
+  {s:"Голубь + SC", f:"Голубь на трассе и сейфти-кар в худший из возможных моментов. Природа тоже болеет против.", w:4, fill:"#D4537E", tx:"#310D1A"},
+  {s:"Банкрот", f:"Банкрот: приоритет в стратегии получает Хэмилтон. Шарль узнаёт об этом из твиттера.", w:6, fill:"#888780", tx:"#151513"},
+  {s:"Переход хода", f:"Переход хода: невезение в этот уикенд достаётся Расселлу. Шарль просто тихо финиширует P6.", w:3, fill:"#378ADD", tx:"#021C36"},
+  {s:"ПОБЕДА", f:"ДЖЕКПОТ! Победа! Стратегия сработала, мотор выжил, дождь не пошёл. Проверьте, не симуляция ли это.", w:1, fill:"#97C459", tx:"#0F2203", win:true}
+];
+const total = sectors.reduce((a,s)=>a+s.w,0);
+let acc = 0;
+sectors.forEach(s=>{ s.a0 = acc/total*2*Math.PI; acc += s.w; s.a1 = acc/total*2*Math.PI; });
+
+const cv = document.getElementById('wheel');
+const ctx = cv.getContext('2d');
+const C = 440, R = 414;
+let rot = -Math.PI/2 - (sectors[0].a0 + sectors[0].a1)/2;
+
+function draw(){
+  ctx.clearRect(0, 0, 880, 880);
+  ctx.save();
+  ctx.translate(C, C);
+  ctx.rotate(rot);
+  sectors.forEach(s=>{
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, R, s.a0, s.a1);
+    ctx.closePath();
+    ctx.fillStyle = s.fill;
+    ctx.fill();
+    ctx.strokeStyle = "#15151E";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    const mid = (s.a0 + s.a1)/2, span = s.a1 - s.a0;
+    if(span > 0.045){
+      ctx.save();
+      ctx.rotate(mid);
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = s.tx;
+      const fs = Math.min(27, Math.max(16, span * 135));
+      ctx.font = "600 " + fs + "px 'Segoe UI', sans-serif";
+      ctx.fillText(s.s, R - 18, 0);
+      ctx.restore();
+    }
+  });
+  ctx.beginPath();
+  ctx.arc(0, 0, 50, 0, 2*Math.PI);
+  ctx.fillStyle = "#E8002D";
+  ctx.fill();
+  ctx.fillStyle = "#FFFFFF";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "700 24px 'Segoe UI', sans-serif";
+  ctx.fillText("SF-26", 0, 0);
+  ctx.restore();
+  ctx.beginPath();
+  ctx.moveTo(C - 26, 8);
+  ctx.lineTo(C + 26, 8);
+  ctx.lineTo(C, 64);
+  ctx.closePath();
+  ctx.fillStyle = "#F5F5F5";
+  ctx.fill();
+}
+draw();
+
+const btn = document.getElementById('spinBtn');
+const resultBox = document.getElementById('result');
+let spinning = false;
+
+btn.addEventListener('click', ()=>{
+  if(spinning) return;
+  spinning = true;
+  btn.disabled = true;
+  resultBox.style.display = "none";
+
+  let r = Math.random() * total, idx = 0, a = 0;
+  for(let i = 0; i < sectors.length; i++){
+    a += sectors[i].w;
+    if(r < a){ idx = i; break; }
+  }
+  const s = sectors[idx];
+  const pad = (s.a1 - s.a0) * 0.15;
+  const target = s.a0 + pad + Math.random() * ((s.a1 - s.a0) - 2*pad);
+  const finalMod = ((-Math.PI/2 - target) % (2*Math.PI) + 2*Math.PI) % (2*Math.PI);
+  const curMod = ((rot % (2*Math.PI)) + 2*Math.PI) % (2*Math.PI);
+  let delta = finalMod - curMod;
+  if(delta <= 0) delta += 2*Math.PI;
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const totalDelta = (reduced ? 0 : 2*Math.PI*5) + delta;
+  const startRot = rot, dur = reduced ? 800 : 4500, t0 = performance.now();
+
+  function frame(t){
+    const p = Math.min(1, (t - t0)/dur);
+    const e = 1 - Math.pow(1 - p, 3);
+    rot = startRot + totalDelta * e;
+    draw();
+    if(p < 1){
+      requestAnimationFrame(frame);
+    } else {
+      spinning = false;
+      btn.disabled = false;
+      const pct = s.w/total*100;
+      document.getElementById('resultTitle').textContent = s.win ? "Джекпот: " + s.s : "Сектор: " + s.s;
+      document.getElementById('resultText').textContent = s.f;
+      document.getElementById('resultOdds').textContent = "Вероятность сектора: " + (pct % 1 === 0 ? pct.toFixed(0) : pct.toFixed(1)) + "%";
+      resultBox.className = s.win ? "result win" : "result";
+      resultBox.style.display = "block";
+    }
+  }
+  requestAnimationFrame(frame);
+});
+</script>
+</body>
+</html>
